@@ -1,0 +1,167 @@
+from flask import Flask, render_template, request, jsonify
+import sqlite3
+from datetime import datetime
+
+app = Flask(__name__)
+
+# 初始化数据库
+def init_db():
+    conn = sqlite3.connect('messages.db')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            author TEXT,
+            content TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.close()
+
+# 首页
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+# 提交表白
+@app.route('/submit', methods=['POST'])
+def submit():
+    author = request.form.get('author', '').strip()
+    content = request.form.get('content', '').strip()
+    
+    if not content:
+        return jsonify({'status': 'error', 'message': '内容不能为空'}), 400
+    
+    conn = sqlite3.connect('messages.db')
+    conn.execute(
+        'INSERT INTO messages (author, content) VALUES (?, ?)',
+        (author if author else None, content)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+# 获取所有表白
+@app.route('/messages')
+def get_messages():
+    conn = sqlite3.connect('messages.db')
+    messages = conn.execute('''
+        SELECT author, content FROM messages 
+        ORDER BY timestamp DESC
+    ''').fetchall()
+    conn.close()
+    return jsonify({'messages': [{'author': msg[0], 'content': msg[1]} for msg in messages]})
+
+if __name__ == '__main__':
+    init_db()
+    app.run(host='0.0.0.0', port=8080)
+
+flask
+sqlite3
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>❤️ 表白墙 ❤️</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff5f5;
+        }
+        h1 {
+            color: #ff6b81;
+            text-align: center;
+        }
+        .input-box {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ffb8c6;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #ff6b81;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .message {
+            background: white;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .message-author {
+            font-weight: bold;
+            color: #ff6b81;
+        }
+    </style>
+</head>
+<body>
+    <h1>❤️ 表白墙 ❤️</h1>
+    
+    <div class="input-box">
+        <input type="text" id="author" placeholder="你的名字（可选）">
+        <textarea id="content" placeholder="写下你的表白..."></textarea>
+        <button onclick="submitMessage()">提交表白</button>
+    </div>
+
+    <div id="wall"></div>
+
+    <script>
+        // 加载表白
+        async function loadMessages() {
+            const response = await fetch('/messages');
+            const data = await response.json();
+            const wall = document.getElementById('wall');
+            
+            wall.innerHTML = data.messages.map(msg => `
+                <div class="message">
+                    <div class="message-author">${msg.author || '匿名用户'}</div>
+                    <div>${msg.content}</div>
+                </div>
+            `).join('');
+        }
+
+        // 提交表白
+        async function submitMessage() {
+            const author = document.getElementById('author').value;
+            const content = document.getElementById('content').value;
+            
+            if (!content) {
+                alert('请输入表白内容！');
+                return;
+            }
+            
+            await fetch('/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `author=${encodeURIComponent(author)}&content=${encodeURIComponent(content)}`
+            });
+            
+            document.getElementById('content').value = '';
+            loadMessages();
+        }
+
+        // 页面加载时自动获取表白
+        loadMessages();
+    </script>
+</body>
+</html>
+
+
